@@ -12,11 +12,12 @@ MARKER="# obt-redirect"
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 usage() {
-  echo "Usage: $0 [setup|remove|trust-cert]"
+  echo "Usage: $0 [setup|remove|trust-cert|untrust-cert]"
   echo ""
-  echo "  setup       Trỏ $TARGET_DOMAIN -> IP của $SOURCE_DOMAIN"
-  echo "  remove      Gỡ entry $TARGET_DOMAIN khỏi $HOSTS_FILE"
-  echo "  trust-cert  Tin tưởng certificate từ $TARGET_DOMAIN (sau khi setup)"
+  echo "  setup        Trỏ $TARGET_DOMAIN -> IP của $SOURCE_DOMAIN"
+  echo "  remove       Gỡ entry $TARGET_DOMAIN khỏi $HOSTS_FILE"
+  echo "  trust-cert   Tin tưởng certificate từ $TARGET_DOMAIN (sau khi setup)"
+  echo "  untrust-cert Gỡ certificate OBT khỏi hệ thống CA"
   exit 1
 }
 
@@ -134,6 +135,63 @@ do_trust_cert() {
   rm -f "$cert_file"
 }
 
+# ── Untrust cert ──────────────────────────────────────────────────────────────
+
+do_untrust_cert() {
+  local domain="$TARGET_DOMAIN"
+  local os
+  os=$(uname -s)
+  local cert_name="obt-redirect-${domain//\./-}"
+
+  if [[ "$os" == "Darwin" ]]; then
+    echo "Tìm và gỡ certificate OBT khỏi macOS Keychain (System)..."
+    # Tìm theo common name hoặc subject chứa domain
+    local found=0
+    while IFS= read -r hash; do
+      [[ -z "$hash" ]] && continue
+      echo "  Gỡ certificate: $hash"
+      sudo security delete-certificate -Z "$hash" /Library/Keychains/System.keychain 2>/dev/null && found=1
+    done < <(sudo security find-certificate -a -Z /Library/Keychains/System.keychain 2>/dev/null \
+              | awk '/SHA-1/{hash=$NF} /'"$domain"'/{print hash}')
+
+    if [[ "$found" -eq 0 ]]; then
+      echo "Không tìm thấy certificate nào liên quan đến $domain trong System Keychain."
+    else
+      echo "Done. Đã gỡ certificate OBT khỏi macOS Keychain."
+      echo "Lưu ý: Có thể cần restart browser để có hiệu lực."
+    fi
+
+  elif [[ "$os" == "Linux" ]]; then
+    local removed=0
+    if [[ -d /usr/local/share/ca-certificates ]]; then
+      local dest="/usr/local/share/ca-certificates/${cert_name}.crt"
+      if [[ -f "$dest" ]]; then
+        sudo rm -f "$dest"
+        sudo update-ca-certificates --fresh
+        removed=1
+      fi
+    fi
+    if [[ -d /etc/pki/ca-trust/source/anchors ]]; then
+      local dest="/etc/pki/ca-trust/source/anchors/${cert_name}.pem"
+      if [[ -f "$dest" ]]; then
+        sudo rm -f "$dest"
+        sudo update-ca-trust extract
+        removed=1
+      fi
+    fi
+
+    if [[ "$removed" -eq 0 ]]; then
+      echo "Không tìm thấy certificate OBT đã cài trên Linux."
+    else
+      echo "Done. Đã gỡ certificate OBT khỏi Linux CA store."
+      echo "Lưu ý: Có thể cần restart browser để có hiệu lực."
+    fi
+  else
+    echo "ERROR: Hệ điều hành $os chưa được hỗ trợ." >&2
+    exit 1
+  fi
+}
+
 # ── Interactive menu nếu không có args ────────────────────────────────────────
 
 choose_action() {
@@ -142,17 +200,19 @@ choose_action() {
   echo "Domain đích  : $TARGET_DOMAIN"
   echo ""
   echo "Chọn hành động:"
-  echo "  1) Setup      - Thêm redirect vào $HOSTS_FILE"
-  echo "  2) Remove     - Gỡ redirect khỏi $HOSTS_FILE"
-  echo "  3) Trust Cert - Tin tưởng certificate từ $TARGET_DOMAIN"
-  echo "  4) Thoát"
+  echo "  1) Setup        - Thêm redirect vào $HOSTS_FILE"
+  echo "  2) Remove       - Gỡ redirect khỏi $HOSTS_FILE"
+  echo "  3) Trust Cert   - Tin tưởng certificate từ $TARGET_DOMAIN"
+  echo "  4) Untrust Cert - Gỡ certificate OBT khỏi hệ thống CA"
+  echo "  5) Thoát"
   echo ""
-  read -rp "Lựa chọn (1/2/3/4): " choice
+  read -rp "Lựa chọn (1/2/3/4/5): " choice
   case "$choice" in
     1) do_setup ;;
     2) do_remove ;;
     3) do_trust_cert ;;
-    4) exit 0 ;;
+    4) do_untrust_cert ;;
+    5) exit 0 ;;
     *) echo "Lựa chọn không hợp lệ."; exit 1 ;;
   esac
 }
@@ -160,9 +220,10 @@ choose_action() {
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 case "${1:-}" in
-  setup)      do_setup ;;
-  remove)     do_remove ;;
-  trust-cert) do_trust_cert ;;
-  "")         choose_action ;;
-  *)          usage ;;
+  setup)        do_setup ;;
+  remove)       do_remove ;;
+  trust-cert)   do_trust_cert ;;
+  untrust-cert) do_untrust_cert ;;
+  "")           choose_action ;;
+  *)            usage ;;
 esac

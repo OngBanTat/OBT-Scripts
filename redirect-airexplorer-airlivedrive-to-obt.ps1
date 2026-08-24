@@ -3,7 +3,7 @@
 # Usage: .\redirect-airexplorer-airlivedrive-to-obt.ps1 [-Action setup|remove]
 
 param(
-    [ValidateSet("setup", "remove", "trust-cert", "")]
+    [ValidateSet("setup", "remove", "trust-cert", "untrust-cert", "")]
     [string]$Action = ""
 )
 
@@ -151,6 +151,39 @@ function Invoke-TrustCert {
     Write-Host "Hoàn tất. Lưu ý: Có thể cần restart browser để có hiệu lực."
 }
 
+# ── Untrust cert ───────────────────────────────────────────────────────────────
+
+function Invoke-UntrustCert {
+    $store = New-Object System.Security.Cryptography.X509Certificates.X509Store(
+        [System.Security.Cryptography.X509Certificates.StoreName]::Root,
+        [System.Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine
+    )
+    $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+
+    foreach ($domain in $TARGET_DOMAINS) {
+        # Tìm cert theo CN hoặc subject chứa domain
+        $toRemove = $store.Certificates | Where-Object {
+            $_.Subject -match [regex]::Escape($domain) -or
+            $_.GetNameInfo(
+                [System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false
+            ) -eq $domain
+        }
+
+        if ($toRemove) {
+            foreach ($cert in $toRemove) {
+                Write-Host "  [REMOVE] $domain - Subject: $($cert.Subject)"
+                $store.Remove($cert)
+            }
+        } else {
+            Write-Host "  [NOT FOUND] Không tìm thấy certificate nào cho $domain trong Trusted Root CA."
+        }
+    }
+
+    $store.Close()
+    Write-Host ""
+    Write-Host "Hoàn tất. Lưu ý: Có thể cần restart browser để có hiệu lực."
+}
+
 # ── Interactive menu nếu không truyền -Action ──────────────────────────────────
 
 function Show-Menu {
@@ -159,17 +192,19 @@ function Show-Menu {
     Write-Host "Domain đích  : $($TARGET_DOMAINS -join ', ')"
     Write-Host ""
     Write-Host "Chọn hành động:"
-    Write-Host "  1) Setup      - Thêm redirect vào hosts"
-    Write-Host "  2) Remove     - Gỡ redirect khỏi hosts"
-    Write-Host "  3) Trust Cert - Tin tưởng certificate từ các domain đích"
-    Write-Host "  4) Thoát"
+    Write-Host "  1) Setup        - Thêm redirect vào hosts"
+    Write-Host "  2) Remove       - Gỡ redirect khỏi hosts"
+    Write-Host "  3) Trust Cert   - Tin tưởng certificate từ các domain đích"
+    Write-Host "  4) Untrust Cert - Gỡ certificate OBT khỏi Trusted Root CA"
+    Write-Host "  5) Thoát"
     Write-Host ""
-    $choice = Read-Host "Lựa chọn (1/2/3/4)"
+    $choice = Read-Host "Lựa chọn (1/2/3/4/5)"
     switch ($choice) {
         "1" { Invoke-Setup }
         "2" { Invoke-Remove }
         "3" { Invoke-TrustCert }
-        "4" { exit 0 }
+        "4" { Invoke-UntrustCert }
+        "5" { exit 0 }
         default { Write-Error "Lựa chọn không hợp lệ."; exit 1 }
     }
 }
@@ -182,8 +217,9 @@ if (-not (Test-Admin)) {
 }
 
 switch ($Action) {
-    "setup"      { Invoke-Setup }
-    "remove"     { Invoke-Remove }
-    "trust-cert" { Invoke-TrustCert }
-    ""           { Show-Menu }
+    "setup"        { Invoke-Setup }
+    "remove"       { Invoke-Remove }
+    "trust-cert"   { Invoke-TrustCert }
+    "untrust-cert" { Invoke-UntrustCert }
+    ""             { Show-Menu }
 }
