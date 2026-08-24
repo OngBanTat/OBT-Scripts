@@ -18,9 +18,10 @@ bash <(curl -fsSL https://raw.githubusercontent.com/OngBanTat/OBT-Scripts/main/r
 **Hoặc clone về chạy:**
 ```bash
 chmod +x redirect-airexplorer-to-obt.sh
-./redirect-airexplorer-to-obt.sh          # menu tương tác
-./redirect-airexplorer-to-obt.sh setup    # thêm redirect
-./redirect-airexplorer-to-obt.sh remove   # gỡ redirect
+./redirect-airexplorer-to-obt.sh           # menu tương tác
+./redirect-airexplorer-to-obt.sh setup     # thêm redirect
+./redirect-airexplorer-to-obt.sh remove    # gỡ redirect
+./redirect-airexplorer-to-obt.sh trust-cert  # tin tưởng certificate từ domain sau redirect
 ```
 
 ### Windows (PowerShell)
@@ -37,14 +38,18 @@ $s = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/OngB
 
 # Remove
 $s = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/OngBanTat/OBT-Scripts/main/redirect-airexplorer-airlivedrive-to-obt.ps1").Content; Invoke-Expression "$s; Invoke-Remove"
+
+# Trust Cert
+$s = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/OngBanTat/OBT-Scripts/main/redirect-airexplorer-airlivedrive-to-obt.ps1").Content; Invoke-Expression "$s; Invoke-TrustCert"
 ```
 
 **Hoặc clone về chạy:**
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\redirect-airexplorer-airlivedrive-to-obt.ps1            # menu tương tác
+.\redirect-airexplorer-airlivedrive-to-obt.ps1                     # menu tương tác
 .\redirect-airexplorer-airlivedrive-to-obt.ps1 -Action setup
 .\redirect-airexplorer-airlivedrive-to-obt.ps1 -Action remove
+.\redirect-airexplorer-airlivedrive-to-obt.ps1 -Action trust-cert  # tin tưởng certificate từ domain sau redirect
 ```
 
 > **Lưu ý:** PowerShell phải chạy với quyền **Administrator** (click chuột phải → *Run as Administrator*).

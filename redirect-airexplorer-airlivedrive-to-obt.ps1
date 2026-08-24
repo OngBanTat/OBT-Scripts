@@ -3,7 +3,7 @@
 # Usage: .\redirect-airexplorer-airlivedrive-to-obt.ps1 [-Action setup|remove]
 
 param(
-    [ValidateSet("setup", "remove", "")]
+    [ValidateSet("setup", "remove", "trust-cert", "")]
     [string]$Action = ""
 )
 
@@ -102,6 +102,55 @@ function Invoke-Remove {
     }
 }
 
+# ── Trust cert ─────────────────────────────────────────────────────────────────
+
+function Invoke-TrustCert {
+    $certFile = [System.IO.Path]::GetTempFileName() -replace '\.tmp$', '.cer'
+
+    foreach ($domain in $TARGET_DOMAINS) {
+        Write-Host "Tải certificate từ $domain..."
+        try {
+            # Kết nối TLS và lấy certificate
+            $tcpClient = New-Object System.Net.Sockets.TcpClient($domain, 443)
+            $sslStream = New-Object System.Net.Security.SslStream(
+                $tcpClient.GetStream(), $false,
+                { param($sender, $cert, $chain, $errors) $true }
+            )
+            $sslStream.AuthenticateAsClient($domain)
+            $cert = $sslStream.RemoteCertificate
+            $sslStream.Close()
+            $tcpClient.Close()
+
+            # Xuất certificate dạng DER
+            $certBytes = $cert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert)
+            [System.IO.File]::WriteAllBytes($certFile, $certBytes)
+
+            Write-Host "  Subject : $($cert.Subject)"
+            Write-Host "  Issuer  : $($cert.Issuer)"
+            Write-Host "  Expires : $($cert.GetExpirationDateString())"
+
+            # Thêm vào Root CA store
+            $store = New-Object System.Security.Cryptography.X509Certificates.X509Store(
+                [System.Security.Cryptography.X509Certificates.StoreName]::Root,
+                [System.Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine
+            )
+            $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+            $x509 = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($certFile)
+            $store.Add($x509)
+            $store.Close()
+
+            Write-Host "  [OK] Certificate của $domain đã được thêm vào Trusted Root CA."
+        } catch {
+            Write-Warning "  [FAIL] Không thể lấy hoặc trust certificate của $domain`: $_"
+        }
+    }
+
+    if (Test-Path $certFile) { Remove-Item $certFile -Force }
+
+    Write-Host ""
+    Write-Host "Hoàn tất. Lưu ý: Có thể cần restart browser để có hiệu lực."
+}
+
 # ── Interactive menu nếu không truyền -Action ──────────────────────────────────
 
 function Show-Menu {
@@ -110,15 +159,17 @@ function Show-Menu {
     Write-Host "Domain đích  : $($TARGET_DOMAINS -join ', ')"
     Write-Host ""
     Write-Host "Chọn hành động:"
-    Write-Host "  1) Setup  - Thêm redirect vào hosts"
-    Write-Host "  2) Remove - Gỡ redirect khỏi hosts"
-    Write-Host "  3) Thoát"
+    Write-Host "  1) Setup      - Thêm redirect vào hosts"
+    Write-Host "  2) Remove     - Gỡ redirect khỏi hosts"
+    Write-Host "  3) Trust Cert - Tin tưởng certificate từ các domain đích"
+    Write-Host "  4) Thoát"
     Write-Host ""
-    $choice = Read-Host "Lựa chọn (1/2/3)"
+    $choice = Read-Host "Lựa chọn (1/2/3/4)"
     switch ($choice) {
         "1" { Invoke-Setup }
         "2" { Invoke-Remove }
-        "3" { exit 0 }
+        "3" { Invoke-TrustCert }
+        "4" { exit 0 }
         default { Write-Error "Lựa chọn không hợp lệ."; exit 1 }
     }
 }
@@ -131,7 +182,8 @@ if (-not (Test-Admin)) {
 }
 
 switch ($Action) {
-    "setup"  { Invoke-Setup }
-    "remove" { Invoke-Remove }
-    ""       { Show-Menu }
+    "setup"      { Invoke-Setup }
+    "remove"     { Invoke-Remove }
+    "trust-cert" { Invoke-TrustCert }
+    ""           { Show-Menu }
 }

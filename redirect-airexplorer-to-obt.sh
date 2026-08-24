@@ -12,10 +12,11 @@ MARKER="# obt-redirect"
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 usage() {
-  echo "Usage: $0 [setup|remove]"
+  echo "Usage: $0 [setup|remove|trust-cert]"
   echo ""
-  echo "  setup   Trỏ $TARGET_DOMAIN -> IP của $SOURCE_DOMAIN"
-  echo "  remove  Gỡ entry $TARGET_DOMAIN khỏi $HOSTS_FILE"
+  echo "  setup       Trỏ $TARGET_DOMAIN -> IP của $SOURCE_DOMAIN"
+  echo "  remove      Gỡ entry $TARGET_DOMAIN khỏi $HOSTS_FILE"
+  echo "  trust-cert  Tin tưởng certificate từ $TARGET_DOMAIN (sau khi setup)"
   exit 1
 }
 
@@ -70,6 +71,69 @@ do_remove() {
   fi
 }
 
+# ── Trust cert ────────────────────────────────────────────────────────────────
+
+do_trust_cert() {
+  local domain="$TARGET_DOMAIN"
+  local cert_file
+  cert_file=$(mktemp /tmp/obt-cert-XXXXXX.pem)
+
+  echo "Tải certificate từ $domain..."
+  if ! openssl s_client -connect "$domain:443" -servername "$domain" \
+       </dev/null 2>/dev/null | \
+       openssl x509 -outform PEM > "$cert_file" 2>/dev/null; then
+    echo "ERROR: Không thể lấy certificate từ $domain" >&2
+    rm -f "$cert_file"
+    exit 1
+  fi
+
+  local subject
+  subject=$(openssl x509 -noout -subject -in "$cert_file" 2>/dev/null | sed 's/subject=//')
+  echo "Certificate subject: $subject"
+
+  local os
+  os=$(uname -s)
+
+  if [[ "$os" == "Darwin" ]]; then
+    echo "Thêm certificate vào macOS Keychain (System)..."
+    sudo security add-trusted-cert \
+      -d \
+      -r trustRoot \
+      -k /Library/Keychains/System.keychain \
+      "$cert_file"
+    echo "Done. Certificate đã được tin tưởng trên macOS."
+    echo "Lưu ý: Có thể cần restart browser để có hiệu lực."
+
+  elif [[ "$os" == "Linux" ]]; then
+    local ca_dir
+    if [[ -d /usr/local/share/ca-certificates ]]; then
+      # Debian/Ubuntu
+      ca_dir="/usr/local/share/ca-certificates"
+      local dest="$ca_dir/obt-redirect-${domain//\./-}.crt"
+      sudo cp "$cert_file" "$dest"
+      sudo update-ca-certificates
+    elif [[ -d /etc/pki/ca-trust/source/anchors ]]; then
+      # RHEL/CentOS/Fedora
+      ca_dir="/etc/pki/ca-trust/source/anchors"
+      local dest="$ca_dir/obt-redirect-${domain//\./-}.pem"
+      sudo cp "$cert_file" "$dest"
+      sudo update-ca-trust extract
+    else
+      echo "ERROR: Không nhận diện được hệ thống CA trên Linux." >&2
+      rm -f "$cert_file"
+      exit 1
+    fi
+    echo "Done. Certificate đã được tin tưởng trên Linux."
+    echo "Lưu ý: Có thể cần restart browser để có hiệu lực."
+  else
+    echo "ERROR: Hệ điều hành $os chưa được hỗ trợ." >&2
+    rm -f "$cert_file"
+    exit 1
+  fi
+
+  rm -f "$cert_file"
+}
+
 # ── Interactive menu nếu không có args ────────────────────────────────────────
 
 choose_action() {
@@ -78,15 +142,17 @@ choose_action() {
   echo "Domain đích  : $TARGET_DOMAIN"
   echo ""
   echo "Chọn hành động:"
-  echo "  1) Setup   - Thêm redirect vào $HOSTS_FILE"
-  echo "  2) Remove  - Gỡ redirect khỏi $HOSTS_FILE"
-  echo "  3) Thoát"
+  echo "  1) Setup      - Thêm redirect vào $HOSTS_FILE"
+  echo "  2) Remove     - Gỡ redirect khỏi $HOSTS_FILE"
+  echo "  3) Trust Cert - Tin tưởng certificate từ $TARGET_DOMAIN"
+  echo "  4) Thoát"
   echo ""
-  read -rp "Lựa chọn (1/2/3): " choice
+  read -rp "Lựa chọn (1/2/3/4): " choice
   case "$choice" in
     1) do_setup ;;
     2) do_remove ;;
-    3) exit 0 ;;
+    3) do_trust_cert ;;
+    4) exit 0 ;;
     *) echo "Lựa chọn không hợp lệ."; exit 1 ;;
   esac
 }
@@ -94,8 +160,9 @@ choose_action() {
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 case "${1:-}" in
-  setup)  do_setup ;;
-  remove) do_remove ;;
-  "")     choose_action ;;
-  *)      usage ;;
+  setup)      do_setup ;;
+  remove)     do_remove ;;
+  trust-cert) do_trust_cert ;;
+  "")         choose_action ;;
+  *)          usage ;;
 esac
