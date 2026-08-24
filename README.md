@@ -12,7 +12,7 @@ Trỏ `www.airexplorer.net` và `www.airlivedrive.com` vào IP của `ongbantat.
 
 **Chạy trực tiếp (interactive menu):**
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/khangpq/OBT-Scripts/main/redirect-airexplorer-to-obt.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/OngBanTat/OBT-Scripts/main/redirect-airexplorer-to-obt.sh)
 ```
 
 **Hoặc clone về chạy:**
@@ -27,16 +27,16 @@ chmod +x redirect-airexplorer-to-obt.sh
 
 **Chạy remote command (mở PowerShell với quyền Administrator):**
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; Invoke-Expression (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/khangpq/OBT-Scripts/main/redirect-airexplorer-airlivedrive-to-obt.ps1").Content
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; Invoke-Expression (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/OngBanTat/OBT-Scripts/main/redirect-airexplorer-airlivedrive-to-obt.ps1").Content
 ```
 
 **Hoặc với tham số cụ thể:**
 ```powershell
 # Setup
-$s = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/khangpq/OBT-Scripts/main/redirect-airexplorer-airlivedrive-to-obt.ps1").Content; Invoke-Expression "$s; Invoke-Setup"
+$s = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/OngBanTat/OBT-Scripts/main/redirect-airexplorer-airlivedrive-to-obt.ps1").Content; Invoke-Expression "$s; Invoke-Setup"
 
 # Remove
-$s = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/khangpq/OBT-Scripts/main/redirect-airexplorer-airlivedrive-to-obt.ps1").Content; Invoke-Expression "$s; Invoke-Remove"
+$s = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/OngBanTat/OBT-Scripts/main/redirect-airexplorer-airlivedrive-to-obt.ps1").Content; Invoke-Expression "$s; Invoke-Remove"
 ```
 
 **Hoặc clone về chạy:**
