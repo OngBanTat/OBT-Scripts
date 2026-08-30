@@ -346,7 +346,21 @@ collect_chain_hashes() {
 
 # ── Interactive menu nếu không có args ────────────────────────────────────────
 
-show_menu() {
+show_lite_menu() {
+  clear
+  echo "=== OBT Redirect Tool (macOS/Linux) ==="
+  echo "Domain nguồn : $SOURCE_DOMAIN"
+  echo "Domain đích  : ${TARGET_DOMAINS[*]}"
+  echo ""
+  echo "Chọn hành động:"
+  echo "  1) Setup + Trust   - Thêm redirect và cài certificate"
+  echo "  2) Untrust + Remove - Gỡ certificate và redirect"
+  echo "  3) Chế độ Full"
+  echo "  4) Thoát"
+  echo ""
+}
+
+show_full_menu() {
   clear
   echo "=== OBT Redirect Tool (macOS/Linux) ==="
   echo "Domain nguồn : $SOURCE_DOMAIN"
@@ -357,22 +371,37 @@ show_menu() {
   echo "  2) Remove       - Gỡ redirect khỏi $HOSTS_FILE"
   echo "  3) Trust Cert   - Tin tưởng certificate từ ${TARGET_DOMAINS[*]}"
   echo "  4) Untrust Cert - Gỡ certificate OBT khỏi hệ thống CA"
-  echo "  5) Thoát"
+  echo "  5) Chế độ Lite"
+  echo "  6) Thoát"
   echo ""
 }
 
 choose_action() {
+  local lite=1
   while true; do
-    show_menu
-    read -rp "Lựa chọn (1/2/3/4/5): " choice
-    case "$choice" in
-      1) do_setup ;;
-      2) do_remove ;;
-      3) do_trust_cert ;;
-      4) do_untrust_cert ;;
-      5) echo "Thoát."; exit 0 ;;
-      *) echo "Lựa chọn không hợp lệ." ;;
-    esac
+    if [[ "$lite" -eq 1 ]]; then
+      show_lite_menu
+      read -rp "Lựa chọn (1/2/3/4): " choice
+      case "$choice" in
+        1) do_setup; do_trust_cert ;;
+        2) do_untrust_cert; do_remove ;;
+        3) lite=0 ;;
+        4) echo "Thoát."; exit 0 ;;
+        *) echo "Lựa chọn không hợp lệ." ;;
+      esac
+    else
+      show_full_menu
+      read -rp "Lựa chọn (1/2/3/4/5/6): " choice
+      case "$choice" in
+        1) do_setup ;;
+        2) do_remove ;;
+        3) do_trust_cert ;;
+        4) do_untrust_cert ;;
+        5) lite=1 ;;
+        6) echo "Thoát."; exit 0 ;;
+        *) echo "Lựa chọn không hợp lệ." ;;
+      esac
+    fi
     echo ""
     read -rp "Nhấn phím bất kỳ để tiếp tục..." -n 1
     echo ""

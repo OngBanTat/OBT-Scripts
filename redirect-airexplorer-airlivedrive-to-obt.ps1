@@ -304,28 +304,50 @@ function Invoke-UntrustCert {
 # ── Interactive menu nếu không truyền -Action ──────────────────────────────────
 
 function Show-Menu {
+    $lite = $true
     while ($true) {
         Clear-Host
         Write-Host "=== OBT Redirect Tool (Windows) ==="
         Write-Host "Domain nguồn : $SOURCE_DOMAIN"
         Write-Host "Domain đích  : $($TARGET_DOMAINS -join ', ')"
         Write-Host ""
-        Write-Host "Chọn hành động:"
-        Write-Host "  1) Setup        - Thêm redirect vào hosts"
-        Write-Host "  2) Remove       - Gỡ redirect khỏi hosts"
-        Write-Host "  3) Trust Cert   - Tin tưởng certificate từ các domain đích"
-        Write-Host "  4) Untrust Cert - Gỡ certificate OBT khỏi Trusted Root CA"
-        Write-Host "  5) Thoát"
-        Write-Host ""
-        $choice = Read-Host "Lựa chọn (1/2/3/4/5)"
-        switch ($choice) {
-            "1" { Invoke-Setup }
-            "2" { Invoke-Remove }
-            "3" { Invoke-TrustCert }
-            "4" { Invoke-UntrustCert }
-            "5" { Write-Host "Thoát."; return }
-            default { Write-Host "Lựa chọn không hợp lệ." }
+
+        if ($lite) {
+            Write-Host "Chọn hành động:"
+            Write-Host "  1) Setup + Trust   - Thêm redirect và cài certificate"
+            Write-Host "  2) Untrust + Remove - Gỡ certificate và redirect"
+            Write-Host "  3) Chế độ Full"
+            Write-Host "  4) Thoát"
+            Write-Host ""
+            $choice = Read-Host "Lựa chọn (1/2/3/4)"
+            switch ($choice) {
+                "1" { Invoke-Setup; Invoke-TrustCert }
+                "2" { Invoke-UntrustCert; Invoke-Remove }
+                "3" { $lite = $false }
+                "4" { Write-Host "Thoát."; return }
+                default { Write-Host "Lựa chọn không hợp lệ." }
+            }
+        } else {
+            Write-Host "Chọn hành động:"
+            Write-Host "  1) Setup        - Thêm redirect vào hosts"
+            Write-Host "  2) Remove       - Gỡ redirect khỏi hosts"
+            Write-Host "  3) Trust Cert   - Tin tưởng certificate từ các domain đích"
+            Write-Host "  4) Untrust Cert - Gỡ certificate OBT khỏi Trusted Root CA"
+            Write-Host "  5) Chế độ Lite"
+            Write-Host "  6) Thoát"
+            Write-Host ""
+            $choice = Read-Host "Lựa chọn (1/2/3/4/5/6)"
+            switch ($choice) {
+                "1" { Invoke-Setup }
+                "2" { Invoke-Remove }
+                "3" { Invoke-TrustCert }
+                "4" { Invoke-UntrustCert }
+                "5" { $lite = $true }
+                "6" { Write-Host "Thoát."; return }
+                default { Write-Host "Lựa chọn không hợp lệ." }
+            }
         }
+
         Write-Host ""
         Write-Host "Nhấn phím bất kỳ để tiếp tục..."
         $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
