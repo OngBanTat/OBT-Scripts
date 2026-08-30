@@ -11,6 +11,12 @@ $ErrorActionPreference = "Stop"
 
 $SOURCE_DOMAIN  = "ongbantat.store"
 $TARGET_DOMAINS = @("www.airexplorer.net", "www.airlivedrive.com")
+# Thêm bare domain (không www.) cho hosts: cả hai đều trỏ về cùng IP nguồn.
+$ALL_HOSTS_DOMAINS = @($TARGET_DOMAINS)
+foreach ($d in $TARGET_DOMAINS) {
+    $bare = $d -replace '^www\.', ''
+    if ($bare -ne $d) { $ALL_HOSTS_DOMAINS += $bare }
+}
 $HOSTS_FILE     = "$env:SystemRoot\System32\drivers\etc\hosts"
 $MARKER         = "# obt-redirect"
 
@@ -80,7 +86,7 @@ function Invoke-Setup {
     $lines = [string[]]@(Get-HostsContent)
     $changed = $script:HostsRepaired   # ghi lại nếu vừa tách bản ghi bị gộp dòng
 
-    foreach ($domain in $TARGET_DOMAINS) {
+    foreach ($domain in $ALL_HOSTS_DOMAINS) {
         $existingLine = $lines | Where-Object { $_ -match "\s+$([regex]::Escape($domain))(\s|$)" }
 
         if ($existingLine) {
@@ -116,7 +122,7 @@ function Invoke-Remove {
     $lines = [string[]]@(Get-HostsContent)
     $found = $script:HostsRepaired   # ghi lại nếu vừa tách bản ghi bị gộp dòng
 
-    foreach ($domain in $TARGET_DOMAINS) {
+    foreach ($domain in $ALL_HOSTS_DOMAINS) {
         $before = $lines.Count
         $lines = $lines | Where-Object { $_ -notmatch "\s+$([regex]::Escape($domain))(\s|$)" }
         if ($lines.Count -lt $before) {

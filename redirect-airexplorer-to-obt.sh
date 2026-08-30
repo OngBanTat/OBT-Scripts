@@ -6,6 +6,12 @@ set -euo pipefail
 
 SOURCE_DOMAIN="ongbantat.store"
 TARGET_DOMAINS=("www.airexplorer.net" "www.airlivedrive.com")
+# Thêm bare domain (không www.) cho hosts.
+ALL_HOSTS_DOMAINS=("${TARGET_DOMAINS[@]}")
+for d in "${TARGET_DOMAINS[@]}"; do
+  bare="${d#www.}"
+  [[ "$bare" != "$d" ]] && ALL_HOSTS_DOMAINS+=("$bare")
+done
 HOSTS_FILE="/etc/hosts"
 MARKER="# obt-redirect"
 
@@ -49,7 +55,7 @@ do_setup() {
   echo "IP của $SOURCE_DOMAIN: $ip"
 
   local changed=0
-  for domain in "${TARGET_DOMAINS[@]}"; do
+  for domain in "${ALL_HOSTS_DOMAINS[@]}"; do
     if entry_exists "$domain"; then
       # Kiểm tra IP có khớp không
       local current_ip
@@ -76,7 +82,7 @@ do_setup() {
 
 do_remove() {
   local found=0
-  for domain in "${TARGET_DOMAINS[@]}"; do
+  for domain in "${ALL_HOSTS_DOMAINS[@]}"; do
     if entry_exists "$domain"; then
       remove_entry "$domain"
       echo "  [REMOVED] $domain"
