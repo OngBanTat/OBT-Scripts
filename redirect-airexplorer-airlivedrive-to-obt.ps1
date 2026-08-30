@@ -91,15 +91,13 @@ function Invoke-Setup {
 
         if ($existingLine) {
             $currentIP = ($existingLine -split '\s+')[0]
-            if ($currentIP -eq $ip) {
-                Write-Host "  [SKIP] $domain - entry đúng IP ($ip), bỏ qua."
-                continue
+            if ($currentIP -ne $ip) {
+                Write-Host "  [UPDATE] $domain - IP cũ=$currentIP -> mới=$ip"
             }
-            Write-Host "  [UPDATE] $domain - IP cũ=$currentIP -> mới=$ip"
-            # @() giữ $lines luôn là mảng -> += sẽ thêm 1 DÒNG MỚI, không nối chuỗi
+            # Luôn xóa entry cũ rồi ghi lại IP mới nhất
             $lines = @($lines | Where-Object { $_ -notmatch "\s+$([regex]::Escape($domain))(\s|$)" })
         } else {
-            Write-Host "  [ADD] $domain"
+            Write-Host "  [ADD] $domain -> $ip"
         }
 
         $lines += "$ip $domain $MARKER"

@@ -58,17 +58,14 @@ do_setup() {
   local changed=0
   for domain in "${ALL_HOSTS_DOMAINS[@]}"; do
     if entry_exists "$domain"; then
-      # Kiểm tra IP có khớp không
       local current_ip
       current_ip=$(grep " ${domain} ${MARKER}" "$HOSTS_FILE" | awk '{print $1}' | head -1)
-      if [[ "$current_ip" == "$ip" ]]; then
-        echo "  [SKIP] $domain - entry đúng IP ($ip), bỏ qua."
-        continue
+      if [[ "$current_ip" != "$ip" ]]; then
+        echo "  [UPDATE] $domain - IP cũ=$current_ip -> mới=$ip"
       fi
-      echo "  [UPDATE] $domain - IP cũ=$current_ip -> mới=$ip"
       remove_entry "$domain"
     else
-      echo "  [ADD] $domain"
+      echo "  [ADD] $domain -> $ip"
     fi
     echo "$ip $domain $MARKER" | sudo tee -a "$HOSTS_FILE" > /dev/null
     changed=1
