@@ -139,13 +139,30 @@ do_trust_cert() {
       local split_files
       split_files=$(split_pem "$cert_file")
 
+      # Trust settings plist: kSecTrustSettingsResult = 0 (Always Trust)
+      local trust_in="/tmp/obt-trust-in-$$.plist"
+      local trust_out="/tmp/obt-trust-out-$$.plist"
+      rm -f "$trust_in" "$trust_out"
+      cat > "$trust_in" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>kSecTrustSettingsResult</key>
+	<integer>0</integer>
+</dict>
+</plist>
+PLIST
+
       while IFS= read -r c; do
         [[ -z "$c" ]] && continue
         security add-trusted-cert \
-          -r trustRoot \
+          -i "$trust_in" \
+          -o "$trust_out" \
           -k ~/Library/Keychains/login.keychain-db \
           "$c"
       done <<< "$split_files"
+      rm -f "$trust_in" "$trust_out"
       [[ -n "$split_files" ]] && rm -f $split_files
       echo "  Done. Certificate chain đã được tin tưởng (Always Trust) trên macOS."
 
