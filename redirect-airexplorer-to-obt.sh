@@ -294,14 +294,14 @@ dump_keychain_certs() {
         pem=""
       fi
     fi
-  done < <(security find-certificate -a -Z -p ~/Library/Keychains/login.keychain-db 2>/dev/null)
+  done < <(security find-certificate -a -Z -p ~/Library/Keychains/login.keychain-db 2>/dev/null | grep -v '^$')
 }
 
 # Thu thập SHA-1 của toàn bộ chain (leaf -> root) theo domain, in ra stdout (mỗi dòng 1 hash)
 collect_chain_hashes() {
   local domain="$1"
-  local dump
-  dump=$(mktemp /tmp/obt-dump-XXXXXX.tsv)
+  local dump="/tmp/obt-dump-$$.tsv"
+  rm -f "$dump"
   dump_keychain_certs > "$dump"
 
   # Tìm leaf: subject hoặc SAN chứa domain (SAN bắt cả wildcard *.domain)
