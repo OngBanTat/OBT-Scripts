@@ -132,15 +132,14 @@ do_trust_cert() {
     echo "  Đã nhận $count certificate(s) trong chain."
 
     if [[ "$os" == "Darwin" ]]; then
-      echo "  Thêm certificate chain vào macOS Keychain (System)..."
+      echo "  Thêm certificate chain vào macOS Keychain (Login)..."
       local split_files
       split_files=$(split_pem "$cert_file")
       while IFS= read -r c; do
         [[ -z "$c" ]] && continue
-        sudo security add-trusted-cert \
-          -d \
+        security add-trusted-cert \
           -r trustRoot \
-          -k /Library/Keychains/System.keychain \
+          -k ~/Library/Keychains/login.keychain-db \
           "$c"
       done <<< "$split_files"
       [[ -n "$split_files" ]] && rm -f $split_files
@@ -219,23 +218,23 @@ do_untrust_cert() {
     local cert_name="obt-redirect-${domain//\./-}"
 
     if [[ "$os" == "Darwin" ]]; then
-      echo "Gỡ toàn bộ certificate chain của $domain khỏi macOS Keychain (System)..."
+      echo "Gỡ toàn bộ certificate chain của $domain khỏi macOS Keychain (Login)..."
       # Lấy SHA-1 của mọi cert có subject hoặc SAN chứa domain (leaf),
       # rồi đi ngược chain theo Issuer -> Subject để gỡ cả root/intermediate.
       local hashes
       hashes=$(collect_chain_hashes "$domain")
       if [[ -z "$hashes" ]]; then
-        echo "  Không tìm thấy certificate nào liên quan đến $domain trong System Keychain."
+        echo "  Không tìm thấy certificate nào liên quan đến $domain trong Login Keychain."
         continue
       fi
       local removed=0
       while IFS= read -r h; do
         [[ -z "$h" ]] && continue
         echo "  Gỡ certificate: $h"
-        sudo security delete-certificate -Z "$h" /Library/Keychains/System.keychain 2>/dev/null && removed=1
+        security delete-certificate -Z "$h" ~/Library/Keychains/login.keychain-db 2>/dev/null && removed=1
       done <<< "$hashes"
       if [[ "$removed" -eq 1 ]]; then
-        echo "  Done. Đã gỡ certificate chain của $domain khỏi macOS Keychain."
+        echo "  Done. Đã gỡ certificate chain của $domain khỏi Login Keychain."
         any_removed=1
       fi
 
@@ -297,7 +296,7 @@ dump_keychain_certs() {
         pem=""
       fi
     fi
-  done < <(sudo security find-certificate -a -Z -p /Library/Keychains/System.keychain 2>/dev/null)
+  done < <(security find-certificate -a -Z -p ~/Library/Keychains/login.keychain-db 2>/dev/null)
 }
 
 # Thu thập SHA-1 của toàn bộ chain (leaf -> root) theo domain, in ra stdout (mỗi dòng 1 hash)
