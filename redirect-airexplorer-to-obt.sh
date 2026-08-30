@@ -39,12 +39,12 @@ resolve_ip() {
 
 entry_exists() {
   local domain="$1"
-  grep -q "$domain" "$HOSTS_FILE" 2>/dev/null
+  grep -q "${domain} ${MARKER}" "$HOSTS_FILE" 2>/dev/null
 }
 
 remove_entry() {
   local domain="$1"
-  sudo sed -i '' "/$domain/d" "$HOSTS_FILE"
+  sudo sed -i '' "/${domain} ${MARKER}/d" "$HOSTS_FILE"
 }
 
 # ── Actions ────────────────────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ do_setup() {
     if entry_exists "$domain"; then
       # Kiểm tra IP có khớp không
       local current_ip
-      current_ip=$(grep "$domain" "$HOSTS_FILE" | awk '{print $1}' | head -1)
+      current_ip=$(grep "${domain} ${MARKER}" "$HOSTS_FILE" | awk '{print $1}' | head -1)
       if [[ "$current_ip" == "$ip" ]]; then
         echo "  [SKIP] $domain - entry đúng IP ($ip), bỏ qua."
         continue
@@ -341,7 +341,7 @@ collect_chain_hashes() {
     done < "$dump"
   done
 
-  printf '%s\n' "${result[@]}" | grep -v '^$'
+  [[ ${#result[@]} -gt 0 ]] && printf '%s\n' "${result[@]}"
   rm -f "$dump"
 }
 
