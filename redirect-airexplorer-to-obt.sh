@@ -139,7 +139,7 @@ do_trust_cert() {
       local split_files
       split_files=$(split_pem "$cert_file")
 
-      # Trust settings plist: kSecTrustSettingsResult = 0 (Always Trust)
+      # Trust settings: array format với kSecTrustSettingsResult = 0 (Always Trust)
       local trust_in="/tmp/obt-trust-in-$$.plist"
       local trust_out="/tmp/obt-trust-out-$$.plist"
       rm -f "$trust_in" "$trust_out"
@@ -147,10 +147,12 @@ do_trust_cert() {
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict>
-	<key>kSecTrustSettingsResult</key>
-	<integer>0</integer>
-</dict>
+<array>
+	<dict>
+		<key>kSecTrustSettingsResult</key>
+		<integer>0</integer>
+	</dict>
+</array>
 </plist>
 PLIST
 
