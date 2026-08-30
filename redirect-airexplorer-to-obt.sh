@@ -39,12 +39,13 @@ resolve_ip() {
 
 entry_exists() {
   local domain="$1"
-  grep -q "${domain} ${MARKER}" "$HOSTS_FILE" 2>/dev/null
+  # Space đứng trước domain tránh match substring (www.airexplorer.net vs airexplorer.net).
+  grep -q " ${domain} ${MARKER}" "$HOSTS_FILE" 2>/dev/null
 }
 
 remove_entry() {
   local domain="$1"
-  sudo sed -i '' "/${domain} ${MARKER}/d" "$HOSTS_FILE"
+  sudo sed -i '' "/ ${domain} ${MARKER}/d" "$HOSTS_FILE"
 }
 
 # ── Actions ────────────────────────────────────────────────────────────────────
@@ -59,7 +60,7 @@ do_setup() {
     if entry_exists "$domain"; then
       # Kiểm tra IP có khớp không
       local current_ip
-      current_ip=$(grep "${domain} ${MARKER}" "$HOSTS_FILE" | awk '{print $1}' | head -1)
+      current_ip=$(grep " ${domain} ${MARKER}" "$HOSTS_FILE" | awk '{print $1}' | head -1)
       if [[ "$current_ip" == "$ip" ]]; then
         echo "  [SKIP] $domain - entry đúng IP ($ip), bỏ qua."
         continue
@@ -320,13 +321,15 @@ collect_chain_hashes() {
   # Duyệt chain theo Issuer -> Subject (parent: subject == issuer của cert hiện tại)
   local seen=()
   local result=()
-  local queue=("${leaf_hashes[@]}")
+  # bash 3.2 (macOS) + set -u: guard empty array expansion
+  local queue=()
+  [[ ${#leaf_hashes[@]} -gt 0 ]] && queue=("${leaf_hashes[@]}")
   local i=0
   while [[ $i -lt ${#queue[@]} ]]; do
     local h="${queue[$i]}"; i=$((i+1))
     # đã duyệt?
     local dup=0
-    for s in "${seen[@]}"; do [[ "$s" == "$h" ]] && dup=1 && break; done
+    [[ ${#seen[@]} -gt 0 ]] && for s in "${seen[@]}"; do [[ "$s" == "$h" ]] && dup=1 && break; done
     [[ "$dup" -eq 1 ]] && continue
     seen+=("$h")
     result+=("$h")
