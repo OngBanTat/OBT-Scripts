@@ -63,5 +63,5 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 | Domain | Script |
 |--------|--------|
-| `www.airexplorer.net` | macOS + Windows |
-| `www.airlivedrive.com` | Windows |
+| `www.airexplorer.net` + `airexplorer.net` | macOS/Linux + Windows |
+| `www.airlivedrive.com` + `airlivedrive.com` | Windows |

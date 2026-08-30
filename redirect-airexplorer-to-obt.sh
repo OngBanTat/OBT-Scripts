@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Redirect www.airexplorer.net -> IP của ongbantat.store trong /etc/hosts
-# Hỗ trợ: setup (thêm entry) và remove (gỡ entry)
+# Redirect www.airexplorer.net và airexplorer.net -> IP của ongbantat.store
+# Hỗ trợ: setup (thêm entry), remove (gỡ entry), trust-cert, untrust-cert
 
 set -euo pipefail
 
 SOURCE_DOMAIN="ongbantat.store"
-TARGET_DOMAINS=("www.airexplorer.net" "www.airlivedrive.com")
+TARGET_DOMAINS=("www.airexplorer.net")
 # Thêm bare domain (không www.) cho hosts.
 ALL_HOSTS_DOMAINS=("${TARGET_DOMAINS[@]}")
 for d in "${TARGET_DOMAINS[@]}"; do
