@@ -139,33 +139,14 @@ do_trust_cert() {
       local split_files
       split_files=$(split_pem "$cert_file")
 
-      # Trust settings plist:信任 mọi purpose (SSL, S/MIME, etc.)
-      local trust_plist="/tmp/obt-trust-$$.plist"
-      cat > "$trust_plist" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>keychain</key>
-	<string>~/Library/Keychains/login.keychain-db</string>
-	<key>trustSettings</key>
-	<dict>
-		<key>kSecTrustSettingsResult</key>
-		<integer>1</integer>
-	</dict>
-</dict>
-</plist>
-PLIST
-
       while IFS= read -r c; do
         [[ -z "$c" ]] && continue
         security add-trusted-cert \
           -r trustRoot \
+          -p ssl \
           -k ~/Library/Keychains/login.keychain-db \
-          -i "$trust_plist" \
           "$c"
       done <<< "$split_files"
-      rm -f "$trust_plist"
       [[ -n "$split_files" ]] && rm -f $split_files
       echo "  Done. Certificate chain đã được tin tưởng (Always Trust) trên macOS."
 
@@ -208,7 +189,6 @@ PLIST
 split_pem() {
   local bundle="$1"
   local i=0 tmp
-  # Xóa file tạm cũ từ lần chạy trước
   rm -f /tmp/obt-cert-split-*.pem
   while IFS= read -r line; do
     if [[ "$line" == "-----BEGIN CERTIFICATE-----" ]]; then
