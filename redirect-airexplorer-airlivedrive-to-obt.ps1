@@ -156,6 +156,10 @@ function Get-FilterDomains {
 }
 
 function Invoke-TrustCert {
+    # Xóa cert cũ trước, rồi lấy cert mới nhất từ TLS.
+    Invoke-UntrustCert
+    Write-Host ""
+
     # Kết nối TLS tới mỗi domain, lấy toàn bộ certificate chain,
     # export từng cert ra file tạm rồi import vào Trusted Root CA
     # của CurrentUser (không cần quyền Administrator cho user store).

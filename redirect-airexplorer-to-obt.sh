@@ -100,6 +100,10 @@ do_remove() {
 # ── Trust cert ────────────────────────────────────────────────────────────────
 
 do_trust_cert() {
+  # Xóa cert cũ trước, rồi lấy cert mới nhất từ TLS.
+  do_untrust_cert
+  echo ""
+
   local os
   os=$(uname -s)
   local ok=0
