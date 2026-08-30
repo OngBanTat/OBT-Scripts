@@ -111,6 +111,7 @@ do_trust_cert() {
   for domain in "${TARGET_DOMAINS[@]}"; do
     echo "Tải certificate chain từ $domain..."
     local cert_file
+    rm -f /tmp/obt-cert-*.pem
     cert_file=$(mktemp /tmp/obt-cert-XXXXXX.pem)
 
     # -showcerts lấy toàn bộ chain (leaf + intermediate + root)
