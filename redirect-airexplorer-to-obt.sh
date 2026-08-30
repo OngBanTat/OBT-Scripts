@@ -214,7 +214,6 @@ do_untrust_cert() {
     local bare="${d#www.}"
     [[ "$bare" != "$d" ]] && all_domains+=("$bare")
   done
-  all_domains+=("$SOURCE_DOMAIN")
 
   for domain in "${all_domains[@]}"; do
     local cert_name="obt-redirect-${domain//\./-}"
