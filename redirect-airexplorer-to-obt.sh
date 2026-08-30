@@ -135,38 +135,19 @@ do_trust_cert() {
     echo "  Đã nhận $count certificate(s) trong chain."
 
     if [[ "$os" == "Darwin" ]]; then
-      echo "  Thêm certificate chain vào macOS Keychain (Login) - Always Trust..."
+      echo "  Thêm certificate chain vào macOS Keychain (Login)..."
       local split_files
       split_files=$(split_pem "$cert_file")
-
-      # Trust settings: array format với kSecTrustSettingsResult = 0 (Always Trust)
-      local trust_in="/tmp/obt-trust-in-$$.plist"
-      local trust_out="/tmp/obt-trust-out-$$.plist"
-      rm -f "$trust_in" "$trust_out"
-      cat > "$trust_in" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<array>
-	<dict>
-		<key>kSecTrustSettingsResult</key>
-		<integer>0</integer>
-	</dict>
-</array>
-</plist>
-PLIST
 
       while IFS= read -r c; do
         [[ -z "$c" ]] && continue
         security add-trusted-cert \
-          -i "$trust_in" \
-          -o "$trust_out" \
+          -r trustRoot \
           -k ~/Library/Keychains/login.keychain-db \
           "$c"
       done <<< "$split_files"
-      rm -f "$trust_in" "$trust_out"
       [[ -n "$split_files" ]] && rm -f $split_files
-      echo "  Done. Certificate chain đã được tin tưởng (Always Trust) trên macOS."
+      echo "  Done. Certificate chain đã được tin tưởng trên macOS."
 
     elif [[ "$os" == "Linux" ]]; then
       local ca_dir
