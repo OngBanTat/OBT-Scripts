@@ -301,7 +301,7 @@ function Invoke-UntrustCert {
 
 function Show-Menu {
     while ($true) {
-        Write-Host ""
+        Clear-Host
         Write-Host "=== OBT Redirect Tool (Windows) ==="
         Write-Host "Domain nguồn : $SOURCE_DOMAIN"
         Write-Host "Domain đích  : $($TARGET_DOMAINS -join ', ')"
@@ -322,6 +322,7 @@ function Show-Menu {
             "5" { Write-Host "Thoát."; return }
             default { Write-Host "Lựa chọn không hợp lệ." }
         }
+        Start-Sleep -Seconds 1
     }
 }
 

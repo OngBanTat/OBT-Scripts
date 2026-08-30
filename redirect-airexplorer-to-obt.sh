@@ -201,7 +201,16 @@ do_untrust_cert() {
   os=$(uname -s)
   local any_removed=0
 
-  for domain in "${TARGET_DOMAINS[@]}"; do
+  # Thu thập cả bare domain (bỏ www.) — cert CN có thể chỉ ghi tên gốc.
+  local all_domains=()
+  for d in "${TARGET_DOMAINS[@]}"; do
+    all_domains+=("$d")
+    local bare="${d#www.}"
+    [[ "$bare" != "$d" ]] && all_domains+=("$bare")
+  done
+  all_domains+=("$SOURCE_DOMAIN")
+
+  for domain in "${all_domains[@]}"; do
     local cert_name="obt-redirect-${domain//\./-}"
 
     if [[ "$os" == "Darwin" ]]; then
@@ -333,28 +342,32 @@ collect_chain_hashes() {
 
 # ── Interactive menu nếu không có args ────────────────────────────────────────
 
+show_menu() {
+  clear
+  echo "=== OBT Redirect Tool (macOS/Linux) ==="
+  echo "Domain nguồn : $SOURCE_DOMAIN"
+  echo "Domain đích  : ${TARGET_DOMAINS[*]}"
+  echo ""
+  echo "Chọn hành động:"
+  echo "  1) Setup        - Thêm redirect vào $HOSTS_FILE"
+  echo "  2) Remove       - Gỡ redirect khỏi $HOSTS_FILE"
+  echo "  3) Trust Cert   - Tin tưởng certificate từ ${TARGET_DOMAINS[*]}"
+  echo "  4) Untrust Cert - Gỡ certificate OBT khỏi hệ thống CA"
+  echo "  5) Thoát"
+  echo ""
+}
+
 choose_action() {
   while true; do
-    echo ""
-    echo "=== OBT Redirect Tool (macOS/Linux) ==="
-    echo "Domain nguồn : $SOURCE_DOMAIN"
-    echo "Domain đích  : ${TARGET_DOMAINS[*]}"
-    echo ""
-    echo "Chọn hành động:"
-    echo "  1) Setup        - Thêm redirect vào $HOSTS_FILE"
-    echo "  2) Remove       - Gỡ redirect khỏi $HOSTS_FILE"
-    echo "  3) Trust Cert   - Tin tưởng certificate từ ${TARGET_DOMAINS[*]}"
-    echo "  4) Untrust Cert - Gỡ certificate OBT khỏi hệ thống CA"
-    echo "  5) Thoát"
-    echo ""
+    show_menu
     read -rp "Lựa chọn (1/2/3/4/5): " choice
     case "$choice" in
-      1) do_setup ;;
-      2) do_remove ;;
-      3) do_trust_cert ;;
-      4) do_untrust_cert ;;
+      1) do_setup ; sleep 1 ;;
+      2) do_remove ; sleep 1 ;;
+      3) do_trust_cert ; sleep 1 ;;
+      4) do_untrust_cert ; sleep 1 ;;
       5) echo "Thoát."; exit 0 ;;
-      *) echo "Lựa chọn không hợp lệ." ;;
+      *) echo "Lựa chọn không hợp lệ." ; sleep 1 ;;
     esac
   done
 }
