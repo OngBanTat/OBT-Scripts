@@ -21,8 +21,8 @@ chmod +x redirect-airexplorer-to-obt.sh
 ./redirect-airexplorer-to-obt.sh              # menu tương tác
 ./redirect-airexplorer-to-obt.sh setup        # thêm redirect
 ./redirect-airexplorer-to-obt.sh remove       # gỡ redirect
-./redirect-airexplorer-to-obt.sh trust-cert   # tin tưởng certificate từ domain sau redirect
-./redirect-airexplorer-to-obt.sh untrust-cert # gỡ certificate OBT khỏi hệ thống CA
+./redirect-airexplorer-to-obt.sh trust-cert   # tin tưởng toàn bộ certificate chain (leaf -> root) từ domain sau redirect
+./redirect-airexplorer-to-obt.sh untrust-cert # gỡ toàn bộ certificate chain của OBT khỏi hệ thống CA
 ```
 
 ### Windows (PowerShell)
@@ -53,8 +53,8 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\redirect-airexplorer-airlivedrive-to-obt.ps1                        # menu tương tác
 .\redirect-airexplorer-airlivedrive-to-obt.ps1 -Action setup
 .\redirect-airexplorer-airlivedrive-to-obt.ps1 -Action remove
-.\redirect-airexplorer-airlivedrive-to-obt.ps1 -Action trust-cert     # tin tưởng certificate từ domain sau redirect
-.\redirect-airexplorer-airlivedrive-to-obt.ps1 -Action untrust-cert   # gỡ certificate OBT khỏi Trusted Root CA
+.\redirect-airexplorer-airlivedrive-to-obt.ps1 -Action trust-cert     # tin tưởng toàn bộ certificate chain (leaf -> root) từ domain sau redirect
+.\redirect-airexplorer-airlivedrive-to-obt.ps1 -Action untrust-cert   # gỡ toàn bộ certificate chain của OBT khỏi Trusted Root CA
 ```
 
 > **Lưu ý:** PowerShell phải chạy với quyền **Administrator** (click chuột phải → *Run as Administrator*).

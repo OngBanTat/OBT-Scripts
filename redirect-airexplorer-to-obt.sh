@@ -5,7 +5,7 @@
 set -euo pipefail
 
 SOURCE_DOMAIN="ongbantat.store"
-TARGET_DOMAIN="www.airexplorer.net"
+TARGET_DOMAINS=("www.airexplorer.net" "www.airlivedrive.com")
 HOSTS_FILE="/etc/hosts"
 MARKER="# obt-redirect"
 
@@ -14,9 +14,9 @@ MARKER="# obt-redirect"
 usage() {
   echo "Usage: $0 [setup|remove|trust-cert|untrust-cert]"
   echo ""
-  echo "  setup        Trỏ $TARGET_DOMAIN -> IP của $SOURCE_DOMAIN"
-  echo "  remove       Gỡ entry $TARGET_DOMAIN khỏi $HOSTS_FILE"
-  echo "  trust-cert   Tin tưởng certificate từ $TARGET_DOMAIN (sau khi setup)"
+  echo "  setup        Trỏ ${TARGET_DOMAINS[*]} -> IP của $SOURCE_DOMAIN"
+  echo "  remove       Gỡ entry ${TARGET_DOMAINS[*]} khỏi $HOSTS_FILE"
+  echo "  trust-cert   Tin tưởng certificate từ ${TARGET_DOMAINS[*]} (sau khi setup)"
   echo "  untrust-cert Gỡ certificate OBT khỏi hệ thống CA"
   exit 1
 }
@@ -32,11 +32,13 @@ resolve_ip() {
 }
 
 entry_exists() {
-  grep -q "$TARGET_DOMAIN" "$HOSTS_FILE" 2>/dev/null
+  local domain="$1"
+  grep -q "$domain" "$HOSTS_FILE" 2>/dev/null
 }
 
 remove_entry() {
-  sudo sed -i '' "/$TARGET_DOMAIN/d" "$HOSTS_FILE"
+  local domain="$1"
+  sudo sed -i '' "/$domain/d" "$HOSTS_FILE"
 }
 
 # ── Actions ────────────────────────────────────────────────────────────────────
@@ -46,175 +48,315 @@ do_setup() {
   ip=$(resolve_ip)
   echo "IP của $SOURCE_DOMAIN: $ip"
 
-  if entry_exists; then
-    # Kiểm tra IP có khớp không
-    local current_ip
-    current_ip=$(grep "$TARGET_DOMAIN" "$HOSTS_FILE" | awk '{print $1}' | head -1)
-    if [[ "$current_ip" == "$ip" ]]; then
-      echo "Entry đã tồn tại và đúng IP ($ip). Không cần cập nhật."
-      exit 0
+  local changed=0
+  for domain in "${TARGET_DOMAINS[@]}"; do
+    if entry_exists "$domain"; then
+      # Kiểm tra IP có khớp không
+      local current_ip
+      current_ip=$(grep "$domain" "$HOSTS_FILE" | awk '{print $1}' | head -1)
+      if [[ "$current_ip" == "$ip" ]]; then
+        echo "  [SKIP] $domain - entry đúng IP ($ip), bỏ qua."
+        continue
+      fi
+      echo "  [UPDATE] $domain - IP cũ=$current_ip -> mới=$ip"
+      remove_entry "$domain"
+    else
+      echo "  [ADD] $domain"
     fi
-    echo "Cập nhật IP cũ ($current_ip) -> mới ($ip)..."
-    remove_entry
-  fi
+    echo "$ip $domain $MARKER" | sudo tee -a "$HOSTS_FILE" > /dev/null
+    changed=1
+  done
 
-  echo "$ip $TARGET_DOMAIN $MARKER" | sudo tee -a "$HOSTS_FILE" > /dev/null
-  echo "Done. Đã thêm: $ip $TARGET_DOMAIN"
-  echo "Kiểm tra: ping -c1 $TARGET_DOMAIN"
+  if [[ "$changed" -eq 1 ]]; then
+    echo "Done. Đã cập nhật hosts. Kiểm tra: ping -c1 ${TARGET_DOMAINS[0]}"
+  else
+    echo "Không có thay đổi."
+  fi
 }
 
 do_remove() {
-  if entry_exists; then
-    remove_entry
-    echo "Done. Đã gỡ entry $TARGET_DOMAIN khỏi $HOSTS_FILE"
+  local found=0
+  for domain in "${TARGET_DOMAINS[@]}"; do
+    if entry_exists "$domain"; then
+      remove_entry "$domain"
+      echo "  [REMOVED] $domain"
+      found=1
+    else
+      echo "  [NOT FOUND] $domain - không có entry"
+    fi
+  done
+
+  if [[ "$found" -eq 1 ]]; then
+    echo "Done. Đã gỡ redirect khỏi $HOSTS_FILE."
   else
-    echo "Không tìm thấy entry $TARGET_DOMAIN trong $HOSTS_FILE"
+    echo "Không tìm thấy entry nào trong $HOSTS_FILE."
   fi
 }
 
 # ── Trust cert ────────────────────────────────────────────────────────────────
 
 do_trust_cert() {
-  local domain="$TARGET_DOMAIN"
-  local cert_file
-  cert_file=$(mktemp /tmp/obt-cert-XXXXXX.pem)
-
-  echo "Tải certificate từ $domain..."
-  if ! openssl s_client -connect "$domain:443" -servername "$domain" \
-       </dev/null 2>/dev/null | \
-       openssl x509 -outform PEM > "$cert_file" 2>/dev/null; then
-    echo "ERROR: Không thể lấy certificate từ $domain" >&2
-    rm -f "$cert_file"
-    exit 1
-  fi
-
-  local subject
-  subject=$(openssl x509 -noout -subject -in "$cert_file" 2>/dev/null | sed 's/subject=//')
-  echo "Certificate subject: $subject"
-
   local os
   os=$(uname -s)
+  local ok=0
 
-  if [[ "$os" == "Darwin" ]]; then
-    echo "Thêm certificate vào macOS Keychain (System)..."
-    sudo security add-trusted-cert \
-      -d \
-      -r trustRoot \
-      -k /Library/Keychains/System.keychain \
-      "$cert_file"
-    echo "Done. Certificate đã được tin tưởng trên macOS."
-    echo "Lưu ý: Có thể cần restart browser để có hiệu lực."
+  for domain in "${TARGET_DOMAINS[@]}"; do
+    echo "Tải certificate chain từ $domain..."
+    local cert_file
+    cert_file=$(mktemp /tmp/obt-cert-XXXXXX.pem)
 
-  elif [[ "$os" == "Linux" ]]; then
-    local ca_dir
-    if [[ -d /usr/local/share/ca-certificates ]]; then
-      # Debian/Ubuntu
-      ca_dir="/usr/local/share/ca-certificates"
-      local dest="$ca_dir/obt-redirect-${domain//\./-}.crt"
-      sudo cp "$cert_file" "$dest"
-      sudo update-ca-certificates
-    elif [[ -d /etc/pki/ca-trust/source/anchors ]]; then
-      # RHEL/CentOS/Fedora
-      ca_dir="/etc/pki/ca-trust/source/anchors"
-      local dest="$ca_dir/obt-redirect-${domain//\./-}.pem"
-      sudo cp "$cert_file" "$dest"
-      sudo update-ca-trust extract
-    else
-      echo "ERROR: Không nhận diện được hệ thống CA trên Linux." >&2
+    # -showcerts lấy toàn bộ chain (leaf + intermediate + root)
+    if ! openssl s_client -connect "$domain:443" -servername "$domain" -showcerts \
+         </dev/null 2>/dev/null | \
+         awk '/-----BEGIN CERTIFICATE-----/{f=1} f{print} /-----END CERTIFICATE-----/{f=0}' \
+         > "$cert_file" 2>/dev/null; then
+      echo "  ERROR: Không thể lấy certificate từ $domain" >&2
       rm -f "$cert_file"
-      exit 1
+      continue
     fi
-    echo "Done. Certificate đã được tin tưởng trên Linux."
-    echo "Lưu ý: Có thể cần restart browser để có hiệu lực."
-  else
-    echo "ERROR: Hệ điều hành $os chưa được hỗ trợ." >&2
-    rm -f "$cert_file"
-    exit 1
-  fi
 
-  rm -f "$cert_file"
+    if [[ ! -s "$cert_file" ]]; then
+      echo "  ERROR: Không lấy được certificate nào từ $domain" >&2
+      rm -f "$cert_file"
+      continue
+    fi
+
+    local count
+    count=$(grep -c "BEGIN CERTIFICATE" "$cert_file")
+    echo "  Đã nhận $count certificate(s) trong chain."
+
+    if [[ "$os" == "Darwin" ]]; then
+      echo "  Thêm certificate chain vào macOS Keychain (System)..."
+      local split_files
+      split_files=$(split_pem "$cert_file")
+      while IFS= read -r c; do
+        [[ -z "$c" ]] && continue
+        sudo security add-trusted-cert \
+          -d \
+          -r trustRoot \
+          -k /Library/Keychains/System.keychain \
+          "$c"
+      done <<< "$split_files"
+      [[ -n "$split_files" ]] && rm -f $split_files
+      echo "  Done. Certificate chain đã được tin tưởng trên macOS."
+
+    elif [[ "$os" == "Linux" ]]; then
+      local ca_dir
+      if [[ -d /usr/local/share/ca-certificates ]]; then
+        # Debian/Ubuntu
+        ca_dir="/usr/local/share/ca-certificates"
+        local dest="$ca_dir/obt-redirect-${domain//\./-}.crt"
+        sudo cp "$cert_file" "$dest"
+        sudo update-ca-certificates
+      elif [[ -d /etc/pki/ca-trust/source/anchors ]]; then
+        # RHEL/CentOS/Fedora
+        ca_dir="/etc/pki/ca-trust/source/anchors"
+        local dest="$ca_dir/obt-redirect-${domain//\./-}.pem"
+        sudo cp "$cert_file" "$dest"
+        sudo update-ca-trust extract
+      else
+        echo "  ERROR: Không nhận diện được hệ thống CA trên Linux." >&2
+        rm -f "$cert_file"
+        continue
+      fi
+      echo "  Done. Certificate chain đã được tin tưởng trên Linux."
+    else
+      echo "  ERROR: Hệ điều hành $os chưa được hỗ trợ." >&2
+      rm -f "$cert_file"
+      continue
+    fi
+
+    rm -f "$cert_file"
+    ok=1
+  done
+
+  if [[ "$ok" -eq 1 ]]; then
+    echo "Lưu ý: Có thể cần restart browser để có hiệu lực."
+  fi
+}
+
+# Tách một bundle PEM thành từng file cert, in đường dẫn mỗi file ra stdout
+split_pem() {
+  local bundle="$1"
+  local i=0 tmp
+  while IFS= read -r line; do
+    if [[ "$line" == "-----BEGIN CERTIFICATE-----" ]]; then
+      i=$((i+1))
+      tmp=$(mktemp /tmp/obt-cert-split-XXXXXX.pem)
+      echo "$tmp"
+      echo "$line" >> "$tmp"
+    elif [[ -n "$tmp" ]]; then
+      echo "$line" >> "$tmp"
+      if [[ "$line" == "-----END CERTIFICATE-----" ]]; then
+        tmp=""
+      fi
+    fi
+  done < "$bundle"
 }
 
 # ── Untrust cert ──────────────────────────────────────────────────────────────
 
 do_untrust_cert() {
-  local domain="$TARGET_DOMAIN"
   local os
   os=$(uname -s)
-  local cert_name="obt-redirect-${domain//\./-}"
+  local any_removed=0
 
-  if [[ "$os" == "Darwin" ]]; then
-    echo "Tìm và gỡ certificate OBT khỏi macOS Keychain (System)..."
-    # Tìm theo common name hoặc subject chứa domain
-    local found=0
-    while IFS= read -r hash; do
-      [[ -z "$hash" ]] && continue
-      echo "  Gỡ certificate: $hash"
-      sudo security delete-certificate -Z "$hash" /Library/Keychains/System.keychain 2>/dev/null && found=1
-    done < <(sudo security find-certificate -a -Z /Library/Keychains/System.keychain 2>/dev/null \
-              | awk '/SHA-1/{hash=$NF} /'"$domain"'/{print hash}')
+  for domain in "${TARGET_DOMAINS[@]}"; do
+    local cert_name="obt-redirect-${domain//\./-}"
 
-    if [[ "$found" -eq 0 ]]; then
-      echo "Không tìm thấy certificate nào liên quan đến $domain trong System Keychain."
-    else
-      echo "Done. Đã gỡ certificate OBT khỏi macOS Keychain."
-      echo "Lưu ý: Có thể cần restart browser để có hiệu lực."
-    fi
-
-  elif [[ "$os" == "Linux" ]]; then
-    local removed=0
-    if [[ -d /usr/local/share/ca-certificates ]]; then
-      local dest="/usr/local/share/ca-certificates/${cert_name}.crt"
-      if [[ -f "$dest" ]]; then
-        sudo rm -f "$dest"
-        sudo update-ca-certificates --fresh
-        removed=1
+    if [[ "$os" == "Darwin" ]]; then
+      echo "Gỡ toàn bộ certificate chain của $domain khỏi macOS Keychain (System)..."
+      # Lấy SHA-1 của mọi cert có subject hoặc SAN chứa domain (leaf),
+      # rồi đi ngược chain theo Issuer -> Subject để gỡ cả root/intermediate.
+      local hashes
+      hashes=$(collect_chain_hashes "$domain")
+      if [[ -z "$hashes" ]]; then
+        echo "  Không tìm thấy certificate nào liên quan đến $domain trong System Keychain."
+        continue
       fi
-    fi
-    if [[ -d /etc/pki/ca-trust/source/anchors ]]; then
-      local dest="/etc/pki/ca-trust/source/anchors/${cert_name}.pem"
-      if [[ -f "$dest" ]]; then
-        sudo rm -f "$dest"
-        sudo update-ca-trust extract
-        removed=1
+      local removed=0
+      while IFS= read -r h; do
+        [[ -z "$h" ]] && continue
+        echo "  Gỡ certificate: $h"
+        sudo security delete-certificate -Z "$h" /Library/Keychains/System.keychain 2>/dev/null && removed=1
+      done <<< "$hashes"
+      if [[ "$removed" -eq 1 ]]; then
+        echo "  Done. Đã gỡ certificate chain của $domain khỏi macOS Keychain."
+        any_removed=1
       fi
-    fi
 
-    if [[ "$removed" -eq 0 ]]; then
-      echo "Không tìm thấy certificate OBT đã cài trên Linux."
+    elif [[ "$os" == "Linux" ]]; then
+      local removed=0
+      if [[ -d /usr/local/share/ca-certificates ]]; then
+        local dest="/usr/local/share/ca-certificates/${cert_name}.crt"
+        if [[ -f "$dest" ]]; then
+          sudo rm -f "$dest"
+          sudo update-ca-certificates --fresh
+          removed=1
+        fi
+      fi
+      if [[ -d /etc/pki/ca-trust/source/anchors ]]; then
+        local dest="/etc/pki/ca-trust/source/anchors/${cert_name}.pem"
+        if [[ -f "$dest" ]]; then
+          sudo rm -f "$dest"
+          sudo update-ca-trust extract
+          removed=1
+        fi
+      fi
+
+      if [[ "$removed" -eq 1 ]]; then
+        echo "  Done. Đã gỡ certificate chain của $domain khỏi Linux CA store."
+        any_removed=1
+      else
+        echo "  Không tìm thấy certificate OBT của $domain đã cài trên Linux."
+      fi
     else
-      echo "Done. Đã gỡ certificate OBT khỏi Linux CA store."
-      echo "Lưu ý: Có thể cần restart browser để có hiệu lực."
+      echo "ERROR: Hệ điều hành $os chưa được hỗ trợ." >&2
+      exit 1
     fi
-  else
-    echo "ERROR: Hệ điều hành $os chưa được hỗ trợ." >&2
-    exit 1
+  done
+
+  if [[ "$any_removed" -eq 1 ]]; then
+    echo "Lưu ý: Có thể cần restart browser để có hiệu lực."
   fi
+}
+
+# In ra danh sách "hash<TAB>subject<TAB>issuer" của mọi cert trong System Keychain
+dump_keychain_certs() {
+  local pem tmp
+  while IFS= read -r line; do
+    if [[ "$line" == "SHA-1 hash:"* ]]; then
+      [[ -n "$pem" ]] && { rm -f "$pem"; pem=""; }
+      h="${line##* }"
+      pem=$(mktemp /tmp/obt-kc-XXXXXX.pem)
+    elif [[ -n "$pem" ]]; then
+      echo "$line" >> "$pem"
+      if [[ "$line" == "-----END CERTIFICATE-----" ]]; then
+        # subject/issuer dạng RFC2253 (OpenSSL mặc định)
+        subj=$(openssl x509 -noout -subject -in "$pem" 2>/dev/null | sed 's/subject= *//')
+        iss=$(openssl x509 -noout -issuer -in "$pem" 2>/dev/null | sed 's/issuer= *//')
+        # SAN: trích các DNS name (bắt cả wildcard, vd: *.airexplorer.net)
+        san=$(openssl x509 -noout -ext subjectAltName -in "$pem" 2>/dev/null \
+              | sed '1d' | tr ',' '\n' | grep -i 'DNS:' | sed 's/DNS://; s/ //g' | tr '\n' ' ')
+        echo -e "${h}\t${subj}\t${iss}\t${san}"
+        rm -f "$pem"
+        pem=""
+      fi
+    fi
+  done < <(sudo security find-certificate -a -Z -p /Library/Keychains/System.keychain 2>/dev/null)
+}
+
+# Thu thập SHA-1 của toàn bộ chain (leaf -> root) theo domain, in ra stdout (mỗi dòng 1 hash)
+collect_chain_hashes() {
+  local domain="$1"
+  local dump
+  dump=$(mktemp /tmp/obt-dump-XXXXXX.tsv)
+  dump_keychain_certs > "$dump"
+
+  # Tìm leaf: subject hoặc SAN chứa domain (SAN bắt cả wildcard *.domain)
+  local leaf_hashes=()
+  while IFS=$'\t' read -r h subj iss san; do
+    [[ -z "$h" ]] && continue
+    if echo "$subj" | grep -qi "$domain"; then
+      leaf_hashes+=("$h")
+    elif echo "$san" | grep -qi "$domain"; then
+      leaf_hashes+=("$h")
+    fi
+  done < "$dump"
+
+  # Duyệt chain theo Issuer -> Subject (parent: subject == issuer của cert hiện tại)
+  local seen=()
+  local result=()
+  local queue=("${leaf_hashes[@]}")
+  local i=0
+  while [[ $i -lt ${#queue[@]} ]]; do
+    local h="${queue[$i]}"; i=$((i+1))
+    # đã duyệt?
+    local dup=0
+    for s in "${seen[@]}"; do [[ "$s" == "$h" ]] && dup=1 && break; done
+    [[ "$dup" -eq 1 ]] && continue
+    seen+=("$h")
+    result+=("$h")
+
+    local cur_iss
+    cur_iss=$(awk -F'\t' -v hh="$h" '$1==hh{print $3}' "$dump")
+    while IFS=$'\t' read -r ph psubj piss; do
+      if [[ "$psubj" == "$cur_iss" && "$ph" != "$h" ]]; then
+        queue+=("$ph")
+      fi
+    done < "$dump"
+  done
+
+  printf '%s\n' "${result[@]}" | grep -v '^$'
+  rm -f "$dump"
 }
 
 # ── Interactive menu nếu không có args ────────────────────────────────────────
 
 choose_action() {
-  echo "=== OBT Redirect Tool (macOS/Linux) ==="
-  echo "Domain nguồn : $SOURCE_DOMAIN"
-  echo "Domain đích  : $TARGET_DOMAIN"
-  echo ""
-  echo "Chọn hành động:"
-  echo "  1) Setup        - Thêm redirect vào $HOSTS_FILE"
-  echo "  2) Remove       - Gỡ redirect khỏi $HOSTS_FILE"
-  echo "  3) Trust Cert   - Tin tưởng certificate từ $TARGET_DOMAIN"
-  echo "  4) Untrust Cert - Gỡ certificate OBT khỏi hệ thống CA"
-  echo "  5) Thoát"
-  echo ""
-  read -rp "Lựa chọn (1/2/3/4/5): " choice
-  case "$choice" in
-    1) do_setup ;;
-    2) do_remove ;;
-    3) do_trust_cert ;;
-    4) do_untrust_cert ;;
-    5) exit 0 ;;
-    *) echo "Lựa chọn không hợp lệ."; exit 1 ;;
-  esac
+  while true; do
+    echo ""
+    echo "=== OBT Redirect Tool (macOS/Linux) ==="
+    echo "Domain nguồn : $SOURCE_DOMAIN"
+    echo "Domain đích  : ${TARGET_DOMAINS[*]}"
+    echo ""
+    echo "Chọn hành động:"
+    echo "  1) Setup        - Thêm redirect vào $HOSTS_FILE"
+    echo "  2) Remove       - Gỡ redirect khỏi $HOSTS_FILE"
+    echo "  3) Trust Cert   - Tin tưởng certificate từ ${TARGET_DOMAINS[*]}"
+    echo "  4) Untrust Cert - Gỡ certificate OBT khỏi hệ thống CA"
+    echo "  5) Thoát"
+    echo ""
+    read -rp "Lựa chọn (1/2/3/4/5): " choice
+    case "$choice" in
+      1) do_setup ;;
+      2) do_remove ;;
+      3) do_trust_cert ;;
+      4) do_untrust_cert ;;
+      5) echo "Thoát."; exit 0 ;;
+      *) echo "Lựa chọn không hợp lệ." ;;
+    esac
+  done
 }
 
 # ── Entry point ────────────────────────────────────────────────────────────────
