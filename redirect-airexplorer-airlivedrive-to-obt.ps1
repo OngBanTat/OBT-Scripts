@@ -322,7 +322,9 @@ function Show-Menu {
             "5" { Write-Host "Thoát."; return }
             default { Write-Host "Lựa chọn không hợp lệ." }
         }
-        Start-Sleep -Seconds 1
+        Write-Host ""
+        Write-Host "Nhấn phím bất kỳ để tiếp tục..."
+        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
     }
 }
 

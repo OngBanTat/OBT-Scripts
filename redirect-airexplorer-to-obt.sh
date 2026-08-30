@@ -362,13 +362,16 @@ choose_action() {
     show_menu
     read -rp "Lựa chọn (1/2/3/4/5): " choice
     case "$choice" in
-      1) do_setup ; sleep 1 ;;
-      2) do_remove ; sleep 1 ;;
-      3) do_trust_cert ; sleep 1 ;;
-      4) do_untrust_cert ; sleep 1 ;;
+      1) do_setup ;;
+      2) do_remove ;;
+      3) do_trust_cert ;;
+      4) do_untrust_cert ;;
       5) echo "Thoát."; exit 0 ;;
-      *) echo "Lựa chọn không hợp lệ." ; sleep 1 ;;
+      *) echo "Lựa chọn không hợp lệ." ;;
     esac
+    echo ""
+    read -rp "Nhấn phím bất kỳ để tiếp tục..." -n 1
+    echo ""
   done
 }
 
