@@ -139,9 +139,14 @@ function Invoke-Remove {
 # ── Trust cert ─────────────────────────────────────────────────────────────────
 
 function Get-FilterDomains {
-    # Gồm domain đích và domain nguồn để lọc/gỡ certificate OBT.
+    # Gồm domain đích + bare domain (không www.) + domain nguồn để lọc/gỡ cert.
     $set = @{}
-    foreach ($d in $TARGET_DOMAINS) { $set[$d] = $true }
+    foreach ($d in $TARGET_DOMAINS) {
+        $set[$d] = $true
+        # Bỏ "www." -> bare domain (cert CN có thể chỉ ghi airexplorer.net)
+        $bare = $d -replace '^www\.', ''
+        if ($bare -ne $d) { $set[$bare] = $true }
+    }
     $set[$SOURCE_DOMAIN] = $true
     return @($set.Keys)
 }
@@ -249,42 +254,46 @@ function Get-DnsNames {
 }
 
 function Invoke-UntrustCert {
-    $store = New-Object System.Security.Cryptography.X509Certificates.X509Store(
-        [System.Security.Cryptography.X509Certificates.StoreName]::Root,
+    # CN chứa domain đích hoặc nguồn -> gỡ cert khỏi CẢ LocalMachine VÀ CurrentUser.
+    $filter = Get-FilterDomains
+    $locations = @(
+        [System.Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine,
         [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
     )
-    $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
-    $all = @($store.Certificates)
 
-    $filter = Get-FilterDomains
-    $toRemove = @()
+    foreach ($loc in $locations) {
+        $store = New-Object System.Security.Cryptography.X509Certificates.X509Store(
+            [System.Security.Cryptography.X509Certificates.StoreName]::Root, $loc
+        )
+        $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+        $all = @($store.Certificates)
+        $toRemove = @()
 
-    foreach ($cert in $all) {
-        # Gỡ mọi cert có Issuer hoặc Subject chứa bất kỳ domain đích/nguồn nào.
-        $hit = $false
-        foreach ($d in $filter) {
-            if ($cert.Issuer -match [regex]::Escape($d) -or
-                $cert.Subject -match [regex]::Escape($d) -or
-                (Get-DnsNames $cert) -contains $d) {
-                $hit = $true
-                break
+        foreach ($cert in $all) {
+            $hit = $false
+            foreach ($d in $filter) {
+                # CN/Subject hoặc SAN chứa domain -> gỡ.
+                if ($cert.Subject -match [regex]::Escape($d) -or
+                    (Get-DnsNames $cert) -contains $d) {
+                    $hit = $true
+                    break
+                }
             }
+            if ($hit -and $toRemove -notcontains $cert) { $toRemove += $cert }
         }
-        if ($hit -and $toRemove -notcontains $cert) { $toRemove += $cert }
+
+        if ($toRemove.Count -gt 0) {
+            foreach ($cert in $toRemove) {
+                Write-Host "  [REMOVE] $($loc)\Root: Subject=$($cert.Subject) Issuer=$($cert.Issuer)"
+                $store.Remove($cert)
+            }
+        } else {
+            Write-Host "  Không có cert OBT nào trong $($loc)\Root."
+        }
+
+        $store.Close()
     }
 
-    if ($toRemove.Count -gt 0) {
-        foreach ($cert in $toRemove) {
-            Write-Host "  [REMOVE] Subject: $($cert.Subject)"
-            Write-Host "           Issuer : $($cert.Issuer)"
-            $store.Remove($cert)
-        }
-        Write-Host "Hoàn tất. Đã gỡ $($toRemove.Count) certificate(s) khỏi Trusted Root CA (CurrentUser)."
-    } else {
-        Write-Host "Không có certificate OBT nào để gỡ."
-    }
-
-    $store.Close()
     Write-Host "Lưu ý: Có thể cần restart browser để có hiệu lực."
 }
 
