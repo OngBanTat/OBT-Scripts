@@ -161,8 +161,7 @@ PLIST
         security add-trusted-cert \
           -r trustRoot \
           -k ~/Library/Keychains/login.keychain-db \
-          -A \
-          -t binding \
+          -i "$trust_plist" \
           "$c"
       done <<< "$split_files"
       rm -f "$trust_plist"
@@ -208,6 +207,8 @@ PLIST
 split_pem() {
   local bundle="$1"
   local i=0 tmp
+  # Xóa file tạm cũ từ lần chạy trước
+  rm -f /tmp/obt-cert-split-*.pem
   while IFS= read -r line; do
     if [[ "$line" == "-----BEGIN CERTIFICATE-----" ]]; then
       i=$((i+1))
