@@ -220,25 +220,33 @@ do_untrust_cert() {
     local cert_name="obt-redirect-${domain//\./-}"
 
     if [[ "$os" == "Darwin" ]]; then
-      echo "Gỡ toàn bộ certificate chain của $domain khỏi macOS Keychain (Login)..."
-      # Lấy SHA-1 của mọi cert có subject hoặc SAN chứa domain (leaf),
-      # rồi đi ngược chain theo Issuer -> Subject để gỡ cả root/intermediate.
-      local hashes
-      hashes=$(collect_chain_hashes "$domain")
-      if [[ -z "$hashes" ]]; then
-        echo "  Không tìm thấy certificate nào liên quan đến $domain trong Login Keychain."
-        continue
-      fi
-      local removed=0
-      while IFS= read -r h; do
-        [[ -z "$h" ]] && continue
-        echo "  Gỡ certificate: $h"
-        security delete-certificate -Z "$h" ~/Library/Keychains/login.keychain-db 2>/dev/null && removed=1
-      done <<< "$hashes"
-      if [[ "$removed" -eq 1 ]]; then
-        echo "  Done. Đã gỡ certificate chain của $domain khỏi Login Keychain."
-        any_removed=1
-      fi
+      # Gỡ từ cả System keychain (sudo) và Login keychain.
+      for kc in "/Library/Keychains/System.keychain" "$HOME/Library/Keychains/login.keychain-db"; do
+        local kc_name
+        [[ "$kc" == *System* ]] && kc_name="System" || kc_name="Login"
+        echo "Gỡ certificate chain của $domain khỏi macOS Keychain ($kc_name)..."
+
+        local hashes
+        hashes=$(collect_chain_hashes "$domain" "$kc")
+        if [[ -z "$hashes" ]]; then
+          echo "  Không tìm thấy cert liên quan đến $domain trong $kc_name Keychain."
+          continue
+        fi
+        local removed=0
+        while IFS= read -r h; do
+          [[ -z "$h" ]] && continue
+          echo "  Gỡ certificate: $h"
+          if [[ "$kc" == *System* ]]; then
+            sudo security delete-certificate -Z "$h" "$kc" && removed=1
+          else
+            security delete-certificate -Z "$h" "$kc" && removed=1
+          fi
+        done <<< "$hashes"
+        if [[ "$removed" -eq 1 ]]; then
+          echo "  Done. Đã gỡ cert chain của $domain khỏi $kc_name Keychain."
+          any_removed=1
+        fi
+      done
 
     elif [[ "$os" == "Linux" ]]; then
       local removed=0
@@ -276,8 +284,9 @@ do_untrust_cert() {
   fi
 }
 
-# In ra danh sách "hash<TAB>subject<TAB>issuer" của mọi cert trong System Keychain
+# In ra danh sách "hash<TAB>subject<TAB>issuer" của mọi cert trong keychain
 dump_keychain_certs() {
+  local keychain="${1:-$HOME/Library/Keychains/login.keychain-db}"
   local pem tmp
   while IFS= read -r line; do
     if [[ "$line" == "SHA-1 hash:"* ]]; then
@@ -298,15 +307,16 @@ dump_keychain_certs() {
         pem=""
       fi
     fi
-  done < <(security find-certificate -a -Z -p ~/Library/Keychains/login.keychain-db 2>/dev/null | grep -v '^$')
+  done < <(security find-certificate -a -Z -p "$keychain" 2>/dev/null | grep -v '^$')
 }
 
 # Thu thập SHA-1 của toàn bộ chain (leaf -> root) theo domain, in ra stdout (mỗi dòng 1 hash)
 collect_chain_hashes() {
   local domain="$1"
+  local keychain="${2:-$HOME/Library/Keychains/login.keychain-db}"
   local dump="/tmp/obt-dump-$$.tsv"
   rm -f "$dump"
-  dump_keychain_certs > "$dump"
+  dump_keychain_certs "$keychain" > "$dump"
 
   # Tìm leaf: subject hoặc SAN chứa domain (SAN bắt cả wildcard *.domain)
   local leaf_hashes=()
