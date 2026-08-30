@@ -143,7 +143,6 @@ do_trust_cert() {
         [[ -z "$c" ]] && continue
         security add-trusted-cert \
           -r trustRoot \
-          -p ssl \
           -k ~/Library/Keychains/login.keychain-db \
           "$c"
       done <<< "$split_files"
@@ -189,11 +188,12 @@ do_trust_cert() {
 split_pem() {
   local bundle="$1"
   local i=0 tmp
-  rm -f /tmp/obt-cert-split-*.pem
+  rm -f /tmp/obt-cert-split-*.pem 2>/dev/null
   while IFS= read -r line; do
     if [[ "$line" == "-----BEGIN CERTIFICATE-----" ]]; then
       i=$((i+1))
-      tmp=$(mktemp /tmp/obt-cert-split-XXXXXX.pem)
+      tmp="/tmp/obt-cert-split-${i}.pem"
+      rm -f "$tmp" 2>/dev/null
       echo "$tmp"
       echo "$line" >> "$tmp"
     elif [[ -n "$tmp" ]]; then
